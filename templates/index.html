@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>HearThis Super Search</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card: #1e293b;
+            --text: #f1f5f9;
+            --muted: #94a3b8;
+            --accent: #38bdf8;
+            --success: #22c55e;
+            --warning: #facc15; /* For Sets/Mixes */
+        }
+        body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 20px; }
+        .container { max-width: 800px; margin: auto; }
+        
+        /* Search Bar */
+        input {
+            width: 100%; padding: 15px; font-size: 18px;
+            background: var(--card); border: 2px solid #334155; color: white;
+            border-radius: 10px; outline: none; box-sizing: border-box;
+        }
+        input:focus { border-color: var(--accent); }
+
+        /* Results */
+        .status { margin: 10px 0; color: var(--muted); font-size: 0.9em; min-height: 20px; }
+        
+        .track {
+            background: var(--card); padding: 15px; border-radius: 10px;
+            margin-bottom: 12px; border: 1px solid #334155;
+            display: flex; flex-direction: column; gap: 8px;
+        }
+        
+        .row-top { display: flex; justify-content: space-between; align-items: flex-start; }
+        .title { font-weight: 600; font-size: 1.1em; color: white; }
+        
+        .badges { display: flex; gap: 8px; font-size: 0.75em; align-items: center; }
+        .badge { padding: 2px 6px; border-radius: 4px; font-weight: 700; }
+        .score { background: #334155; color: var(--accent); }
+        .is-set { background: #422006; color: var(--warning); border: 1px solid var(--warning); }
+        .is-track { background: #064e3b; color: var(--success); }
+
+        .meta { font-size: 0.85em; color: var(--muted); }
+        .links a { color: var(--accent); text-decoration: none; margin-right: 15px; }
+        .links a.dl { color: var(--success); }
+        audio { width: 100%; height: 30px; margin-top: 5px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2 style="text-align:center">⚡ HearThis Engine</h2>
+    <input id="q" placeholder="Search song..." autocomplete="off">
+    <div id="status" class="status"></div>
+    <div id="results"></div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const input = document.getElementById("q");
+    const resultsBox = document.getElementById("results");
+    const statusBox = document.getElementById("status");
+    let debounce;
+
+    input.addEventListener("input", () => {
+        clearTimeout(debounce);
+        debounce = setTimeout(() => search(input.value.trim()), 400);
+    });
+
+    async function search(q) {
+        if (q.length < 2) return;
+        
+        statusBox.innerHTML = "Searching...";
+        // resultsBox.innerHTML = ""; // Optional: Keep old results while loading
+
+        try {
+            const res = await fetch(`/search?q=${encodeURIComponent(q)}`);
+            const data = await res.json();
+            
+            statusBox.innerHTML = `${data.length} results found`;
+            resultsBox.innerHTML = "";
+
+            if (!data.length) {
+                resultsBox.innerHTML = "<div style='text-align:center; color:#666'>No tracks found.</div>";
+                return;
+            }
+
+            data.forEach(t => {
+                // Logic to detect if it's a SET (Longer than 10 mins / 600 seconds)
+                const duration = parseInt(t.duration || 0);
+                const isSet = duration > 600; 
+                const durationStr = formatTime(duration);
+
+                // If you strictly want to HIDE sets, uncomment the next line:
+                // if (isSet) return; 
+
+                const div = document.createElement("div");
+                div.className = "track";
+                div.innerHTML = `
+                    <div class="row-top">
+                        <div class="title">${t.title}</div>
+                        <div class="badges">
+                            ${isSet ? `<span class="badge is-set">SET (${durationStr})</span>` 
+                                    : `<span class="badge is-track">TRACK (${durationStr})</span>`}
+                            <span class="badge score">${t._score || 0}% Match</span>
+                        </div>
+                    </div>
+                    <div class="meta">
+                        Artist: <b>${t.user?.username || "?"}</b> &bull; Plays: ${t.playback_count || 0}
+                    </div>
+                    <div class="links">
+                        <a href="${t.permalink_url}" target="_blank">Open</a>
+                        ${t.download_url ? `<a href="${t.download_url}" class="dl" target="_blank">Download</a>` : ""}
+                    </div>
+                    ${t.stream_url ? `<audio controls src="${t.stream_url}" preload="none"></audio>` : ""}
+                `;
+                resultsBox.appendChild(div);
+            });
+        } catch (e) {
+            statusBox.innerHTML = "Error connecting to server.";
+        }
+    }
+
+    // Helper to make seconds look like "4:30" or "15:00"
+    function formatTime(seconds) {
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return `${m}:${s < 10 ? '0' : ''}${s}`;
+    }
+});
+</script>
+</body>
+</html>
